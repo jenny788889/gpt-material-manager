@@ -46,6 +46,26 @@ async function filesToDataURLs(files){
   return Promise.all(arr.map(fileToDataURL));
 }
 function escapeHtml(s=''){return String(s).replace(/[&<>"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#039;'}[m]))}
+function materialChoiceLabel(material, subItemId){
+  if(!material) return '物料';
+  if(subItemId){
+    const sub=(material.subItems||[]).find(s=>s.id===subItemId);
+    return sub ? `${material.name} · ${sub.name}` : material.name;
+  }
+  return material.name;
+}
+function materialChoices(materials){
+  const out=[];
+  materials.forEach(m=>{
+    const subs=m.subItems||[];
+    if(subs.length){
+      subs.forEach(s=>out.push({value:`${m.id}::${s.id}`,label:`${m.name} · ${s.name}`}));
+    }else{
+      out.push({value:`${m.id}::`,label:m.name});
+    }
+  });
+  return out;
+}
 function countdownInfo(dateStr){
   if(!dateStr) return {days:null,msg:'还没有设置场次日期'};
   const p=dateStr.split('-').map(Number);
@@ -216,12 +236,12 @@ async function exportExcel(){
       ...events.map(e=>[e.id,e.name,e.date,e.city,e.venue])
     ]},
     {name:'我的物料',rows:[
-      ['内部ID','名称','总量','预留','发放方式','伸手计划量','伸手已发','库存模式','制作状态','绑定场次ID','备注','图片数量'],
-      ...materials.map(m=>[m.id,m.name,Number(m.qty||0),Number(m.reserved||0),methodLabels[m.distributionMethod||'exchange']||'',Number(m.handoutPlan||0),Number(m.handoutDone||0),inventoryLabels[m.inventoryMode]||'',m.status||'',(m.eventIds||[]).join(';'),m.note||'',m.image?1:0])
+      ['内部ID','名称','总量','预留','发放方式','伸手计划量','伸手已发','库存模式','制作状态','绑定场次ID','备注','图片数量','子项数量','子项明细'],
+      ...materials.map(m=>[m.id,m.name,Number(m.qty||0),Number(m.reserved||0),methodLabels[m.distributionMethod||'exchange']||'',Number(m.handoutPlan||0),Number(m.handoutDone||0),inventoryLabels[m.inventoryMode]||'',m.status||'',(m.eventIds||[]).join(';'),m.note||'',m.image?1:0,(m.subItems||[]).length,(m.subItems||[]).map(s=>`${s.name}:${s.qty}`).join('；')])
     ]},
     {name:'互换',rows:[
       ['内部ID','对方昵称','微信号','场次ID','我给物料ID','我给数量','对方无料名称','对方数量','地点','时间','状态','备注','对方图片数量'],
-      ...exchanges.map(x=>[x.id,x.partnerName||'',x.partnerWechat||'',x.eventId||'',x.give?.[0]?.materialId||'',Number(x.give?.[0]?.qty||0),(x.receiveItems||[]).map(r=>r.name||'').join('；'),(x.receiveItems||[]).map(r=>Number(r.qty||1)).join('；'),x.place||'',x.time||'',exchangeStatus[x.status]||x.status||'',x.note||'',(x.receiveItems||[]).reduce((n,r)=>n+(r.images?.length||0),0)])
+      ...exchanges.map(x=>[x.id,x.partnerName||'',x.partnerWechat||'',x.eventId||'',x.give?.[0]?.materialId||'',Number(x.give?.[0]?.qty||0),x.receiveItems?.[0]?.name||'',Number(x.receiveItems?.[0]?.qty||0),x.place||'',x.time||'',exchangeStatus[x.status]||x.status||'',x.note||'',x.receiveItems?.[0]?.images?.length||0])
     ]},
     {name:'蹲蹲',rows:[
       ['内部ID','老师昵称','小红书','场次ID','地点','时间','领取条件','状态','备注','OOTD是否有图','无料图片数量'],
@@ -489,13 +509,27 @@ async function renderMaterials(view){
     const method=m.distributionMethod||'exchange';
     const methodLabels={exchange:'互换',handout:'伸手',both:'互换+伸手',keep:'仅自留'};
     const trueAvailable=Math.max(0,Number(m.qty||0)-Number(m.reserved||0)-activeBooked-handoutPlan);
+    const subItems=m.subItems||[];
+    const subBooked={};
+    exchanges.filter(x=>x.status!=='cancelled').forEach(x=>{
+      (x.give||[]).filter(g=>g.materialId===m.id && g.subItemId).forEach(g=>{
+        subBooked[g.subItemId]=(subBooked[g.subItemId]||0)+Number(g.qty||0);
+      });
+    });
+    const subHtml=subItems.length?`
+      <div class="subitem-mini-list">
+        ${subItems.map(s=>`<span class="subitem-chip">${escapeHtml(s.name)} ${Number(s.qty||0)}${subBooked[s.id]?` / 已约${subBooked[s.id]}`:''}</span>`).join('')}
+      </div>`:'';
     list.append(el(`<div class="item clickable" data-edit-material="${m.id}">
-      <div class="thumb">${m.image?`<img src="${m.image}">`:'物料图'}</div>
+      <div class="thumb">${m.image?`<img src="${m.image}">`:subItems.find(s=>s.image)?.image?`<img src="${subItems.find(s=>s.image).image}">`:'物料图'}</div>
       <div class="item-main">
         <div class="item-title">${escapeHtml(m.name)}</div>
         <div class="sub">${escapeHtml(eventNames||'未绑定场次')}</div>
-        <div class="method-tags"><span class="method-tag">${methodLabels[method]||'互换'}</span></div>
-        <div class="sub">总量 ${m.qty||0} · 预留 ${m.reserved||0} · 已约互换 ${activeBooked} · 伸手计划 ${handoutPlan} · 可用 ${trueAvailable}</div>
+        <div class="method-tags"><span class="method-tag">${methodLabels[method]||'互换'}</span>${subItems.length?`<span class="method-tag">${subItems.length} 个子项</span>`:''}</div>
+        ${subHtml}
+        ${subItems.length
+          ? `<div class="sub">子项数量分别管理 · 伸手计划 ${handoutPlan}</div>`
+          : `<div class="sub">总量 ${m.qty||0} · 预留 ${m.reserved||0} · 已约互换 ${activeBooked} · 伸手计划 ${handoutPlan} · 可用 ${trueAvailable}</div>`}
         ${handoutPlan?`<div class="sub">伸手已发 ${handoutDone} / ${handoutPlan}</div>`:''}
       </div>
       <div class="badge">${m.inventoryMode==='shared'?'共用':'分场'}</div>
@@ -531,7 +565,7 @@ async function renderExchanges(view){
     let rows=all.filter(matchesView).filter(x=>exchangeEventFilter==='all'||x.eventId===exchangeEventFilter);
     rows=rows.filter(x=>{
       const ev=events.find(e=>e.id===x.eventId);
-      const give=(x.give||[]).map(g=>materials.find(m=>m.id===g.materialId)?.name||'').join(' ');
+      const give=(x.give||[]).map(g=>materialChoiceLabel(materials.find(m=>m.id===g.materialId),g.subItemId)).join(' ');
       const recv=(x.receiveItems||[]).map(r=>r.name||'').join(' ');
       return [x.partnerName,x.partnerWechat,ev?.name,x.place,x.note,give,recv].join(' ').toLowerCase().includes(q);
     });
@@ -546,7 +580,7 @@ async function renderExchanges(view){
       }
       if(!rows.length){list.append(el('<div class="small-note">当前没有待交换记录。</div>'));return;}
       rows.forEach(x=>{
-        const give=(x.give||[]).map(g=>`${escapeHtml(materials.find(m=>m.id===g.materialId)?.name||'物料')} ×${g.qty}`).join('、');
+        const give=(x.give||[]).map(g=>`${escapeHtml(materialChoiceLabel(materials.find(m=>m.id===g.materialId),g.subItemId))} ×${g.qty}`).join('、');
         const recv=(x.receiveItems||[]).map(r=>`${escapeHtml(r.name||'对方物料')} ×${r.qty}`).join('、');
         list.append(el(`<div class="card onsite-card clickable" data-edit-exchange="${x.id}">
           <div class="section-head">
@@ -571,7 +605,7 @@ async function renderExchanges(view){
           <div class="item-main">
             <div class="item-title">${escapeHtml(x.partnerName||'未命名')}</div>
             <div class="sub">${escapeHtml(ev?.name||'未绑定场次')} · ${escapeHtml(x.place||'未填地点')}</div>
-            <div class="receive-summary">${(x.receiveItems||[]).length ? (x.receiveItems||[]).map(r=>`<span class="receive-chip">${escapeHtml(r.name||'未命名')} ×${Number(r.qty||1)}</span>`).join('') : '<span class="sub">未填写对方物料</span>'}</div>
+            <div class="sub">${(x.receiveItems||[]).map(r=>escapeHtml(r.name)).join('、')||'未填写对方物料'}</div>
           </div>
           <div class="badge">${statusLabel(x.status)}</div>
         </div>`));
@@ -699,13 +733,33 @@ async function openModal(action,id=null){
   if(action==='new-material'||action==='edit-material'){
     const current=action==='edit-material'?await getOne('materials',id):null;
     title.textContent=current?'编辑物料':'新建物料';
+
+    const subState=(current?.subItems||[]).map(s=>({
+      id:s.id||uid('sub'),
+      name:s.name||'',
+      qty:Number(s.qty||0),
+      image:s.image||'',
+      newImage:''
+    }));
+
     body.innerHTML=`
-      <div class="field"><label>物料图片</label>
-        <div class="image-preview" id="material-image-preview">${current?.image?`<img src="${current.image}">`:'<span>暂无图片</span>'}</div>
+      <div class="field"><label>物料主图（可选）</label>
+        <div class="image-preview" id="material-image-preview">${current?.image?`<img src="${current.image}">`:'<span>暂无主图</span>'}</div>
         <input class="input" name="imageFile" id="material-image-file" type="file" accept="image/*" style="margin-top:8px">
       </div>
-      <div class="field"><label>物料名称</label><input class="input" name="name" value="${escapeHtml(current?.name||'')}" placeholder="例如：OSTA 透明卡"></div>
-      <div class="row"><div class="field"><label>总量</label><input class="input" name="qty" type="number" value="${current?.qty??1}" min="0"></div><div class="field"><label>预留</label><input class="input" name="reserved" type="number" value="${current?.reserved??0}" min="0"></div></div>
+      <div class="field"><label>物料名称</label><input class="input" name="name" value="${escapeHtml(current?.name||'')}" placeholder="例如：镭射票 / XXXX生日Set"></div>
+
+      <div class="field">
+        <label>子项（可选）</label>
+        <div class="small-note">例如：镭射票 → 成员A / 成员B / 成员C；生日Set → 镭射票 / 吧唧。没有子项就保持为空。</div>
+        <div id="subitems-editor" style="margin-top:8px"></div>
+        <button type="button" class="editor-add" id="add-subitem">＋ 添加子项</button>
+      </div>
+
+      <div class="row">
+        <div class="field"><label>总量（无子项时使用）</label><input class="input" name="qty" type="number" value="${current?.qty??1}" min="0"></div>
+        <div class="field"><label>预留</label><input class="input" name="reserved" type="number" value="${current?.reserved??0}" min="0"></div>
+      </div>
       <div class="field"><label>发放方式</label>
         <select name="distributionMethod">
           <option value="exchange" ${(current?.distributionMethod||'exchange')==='exchange'?'selected':''}>互换</option>
@@ -723,11 +777,50 @@ async function openModal(action,id=null){
       <div class="field"><label>制作状态</label><select name="status">${['构思中','设计中','打样中','有成品'].map(s=>`<option ${current?.status===s?'selected':''}>${s}</option>`).join('')}</select></div>
       <div class="field"><label>备注</label><textarea name="note">${escapeHtml(current?.note||'')}</textarea></div>
       ${current?'<button type="button" class="danger" id="delete-material">删除物料</button>':''}`;
+
+    const drawSubItems=()=>{
+      const host=document.getElementById('subitems-editor');
+      if(!host)return;
+      host.innerHTML=subState.map((s,i)=>`
+        <div class="subitem-editor">
+          <div class="editor-head">
+            <div class="editor-title">子项 ${i+1}</div>
+            <button type="button" class="editor-remove" data-remove-sub="${i}">删除</button>
+          </div>
+          <div class="field"><label>名称</label><input class="input sub-name" data-index="${i}" value="${escapeHtml(s.name)}" placeholder="例如：成员A / 镭射票 / 吧唧"></div>
+          <div class="field"><label>数量</label><input class="input sub-qty" data-index="${i}" type="number" min="0" value="${s.qty}"></div>
+          <div class="field"><label>图片</label>
+            <input class="input sub-image-file" data-index="${i}" type="file" accept="image/*">
+            <div class="subitem-preview" data-preview-index="${i}">${(s.newImage||s.image)?`<img src="${s.newImage||s.image}">`:''}</div>
+          </div>
+        </div>
+      `).join('');
+
+      host.querySelectorAll('.sub-name').forEach(inp=>inp.addEventListener('input',()=>subState[Number(inp.dataset.index)].name=inp.value));
+      host.querySelectorAll('.sub-qty').forEach(inp=>inp.addEventListener('input',()=>subState[Number(inp.dataset.index)].qty=Math.max(0,Number(inp.value||0))));
+      host.querySelectorAll('.sub-image-file').forEach(inp=>inp.addEventListener('change',async()=>{
+        const idx=Number(inp.dataset.index), file=inp.files?.[0];
+        if(!file)return;
+        subState[idx].newImage=await fileToDataURL(file);
+        const prev=host.querySelector(`[data-preview-index="${idx}"]`);
+        if(prev)prev.innerHTML=`<img src="${subState[idx].newImage}">`;
+      }));
+      host.querySelectorAll('[data-remove-sub]').forEach(btn=>btn.addEventListener('click',()=>{
+        subState.splice(Number(btn.dataset.removeSub),1);
+        drawSubItems();
+      }));
+    };
+
     saveHandler=async()=>{
       const f=new FormData(document.getElementById('modal-form'));
       const obj=current||{id:uid('mat'),image:'',allocations:{},exchangeable:true};
       const file=f.get('imageFile'); if(file&&file.size) obj.image=await fileToDataURL(file);
-      obj.name=f.get('name');obj.qty=Number(f.get('qty')||0);obj.reserved=Number(f.get('reserved')||0);
+      obj.name=f.get('name');
+      obj.qty=Number(f.get('qty')||0);
+      obj.reserved=Number(f.get('reserved')||0);
+      obj.subItems=subState
+        .filter(s=>s.name.trim())
+        .map(s=>({id:s.id||uid('sub'),name:s.name.trim(),qty:Math.max(0,Number(s.qty||0)),image:s.newImage||s.image||''}));
       obj.status=f.get('status');obj.inventoryMode=f.get('inventoryMode');obj.eventIds=f.getAll('eventIds');obj.note=f.get('note');
       obj.distributionMethod=f.get('distributionMethod')||'exchange';
       obj.handoutPlan=Math.max(0,Number(f.get('handoutPlan')||0));
@@ -735,7 +828,12 @@ async function openModal(action,id=null){
       if(obj.handoutDone>obj.handoutPlan && obj.handoutPlan>0) obj.handoutDone=obj.handoutPlan;
       await put('materials',obj);
     };
+
     setTimeout(()=>{
+      drawSubItems();
+      const addBtn=document.getElementById('add-subitem');
+      if(addBtn)addBtn.onclick=()=>{subState.push({id:uid('sub'),name:'',qty:0,image:'',newImage:''});drawSubItems();};
+
       const inp=document.getElementById('material-image-file');
       if(inp) inp.addEventListener('change',async()=>{
         const file=inp.files?.[0];if(!file)return;
@@ -753,53 +851,113 @@ async function openModal(action,id=null){
   if(action==='new-exchange'||action==='edit-exchange'){
     const current=action==='edit-exchange'?await getOne('exchanges',id):null;
     title.textContent=current?'编辑互换':'新建互换';
-    let receiveItems=(current?.receiveItems||[]).map(r=>({name:r.name||'',qty:Number(r.qty||1),images:r.images||(r.image?[r.image]:[])}));
-    if(!receiveItems.length && current?.receive?.length) receiveItems=current.receive.map(r=>({name:'对方物料',qty:Number(r.qty||1),images:[]}));
-    if(!receiveItems.length) receiveItems=[{name:'',qty:1,images:[]}];
+    const receive=current?.receiveItems?.[0]||{name:'',images:[],qty:1};
+
+    const choiceList=materialChoices(materials);
+    const giveState=(current?.give?.length?current.give:[{materialId:materials[0]?.id||'',subItemId:null,qty:1}]).map(g=>({
+      materialId:g.materialId||'',
+      subItemId:g.subItemId||null,
+      qty:Number(g.qty||1)
+    }));
 
     body.innerHTML=`
       <div class="field"><label>对方微信昵称 / 备注</label><input class="input" name="partnerName" value="${escapeHtml(current?.partnerName||'')}" placeholder="例如：77"></div>
       <div class="field"><label>微信号（可选）</label><input class="input" name="partnerWechat" value="${escapeHtml(current?.partnerWechat||'')}"></div>
       <div class="field"><label>场次</label><select name="eventId">${events.map(ev=>`<option value="${ev.id}" ${current?.eventId===ev.id?'selected':''}>${escapeHtml(ev.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>我给她</label><select name="materialId">${materials.map(m=>`<option value="${m.id}" ${current?.give?.[0]?.materialId===m.id?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>我给数量</label><input class="input" name="giveQty" type="number" min="1" value="${current?.give?.[0]?.qty||1}"></div>
-      <div class="field"><label>她给我的无料</label><div id="receive-items-editor"></div><button type="button" class="receive-add" id="add-receive-item">＋ 添加对方无料</button></div>
+
+      <div class="field">
+        <label>我给她</label>
+        <div class="small-note">可一次添加多个自己的无料；如果物料有子项，会显示为“父物料 · 子项”。</div>
+        <div id="give-items-editor" style="margin-top:8px"></div>
+        <button type="button" class="editor-add" id="add-give-item">＋ 添加我的物料</button>
+      </div>
+
+      <div class="field"><label>她给我：物料名称</label><input class="input" name="receiveName" value="${escapeHtml(receive.name||'')}" placeholder="例如：虎小卡"></div>
+      <div class="field"><label>对方无料图片（可一次多选）</label>
+        <input class="input" name="receiveImages" id="receive-images" type="file" accept="image/*" multiple>
+        <div class="multi-preview" id="receive-preview" style="margin-top:8px">${(receive.images||[]).map(img=>`<img src="${img}">`).join('')}</div>
+      </div>
+      <div class="field"><label>对方给我数量</label><input class="input" name="receiveQty" type="number" min="1" value="${receive.qty||1}"></div>
       <div class="row"><div class="field"><label>交换地点</label><input class="input" name="place" value="${escapeHtml(current?.place||'')}" placeholder="例如：F6场内"></div><div class="field"><label>时间</label><input class="input" name="time" type="time" value="${current?.time||''}"></div></div>
       <div class="field"><label>现场备注</label><textarea name="note">${escapeHtml(current?.note||'')}</textarea></div>
-      <div class="field"><label>状态</label><select name="status">${[['booked','已约定'],['onsite','待交换'],['done','已完成'],['cancelled','已取消']].map(([v,l])=>`<option value="${v}" ${(current?.status||'onsite')===v?'selected':''}>${l}</option>`).join('')}</select></div>
+      <div class="field"><label>状态</label><select name="status">
+        ${[['booked','已约定'],['onsite','待交换'],['done','已完成'],['cancelled','已取消']].map(([v,l])=>`<option value="${v}" ${(current?.status||'onsite')===v?'selected':''}>${l}</option>`).join('')}
+      </select></div>
       ${current?'<button type="button" class="danger" id="delete-exchange">删除互换</button>':''}`;
 
-    const editorState=receiveItems.map(item=>({name:item.name||'',qty:Number(item.qty||1),oldImages:[...(item.images||[])],newImages:[]}));
-    const drawReceiveEditors=()=>{
-      const host=document.getElementById('receive-items-editor'); if(!host)return;
-      host.innerHTML=editorState.map((item,i)=>`
-        <div class="receive-item-editor" data-receive-index="${i}">
-          <div class="receive-item-head"><div class="receive-item-title">无料 ${i+1}</div>${editorState.length>1?`<button type="button" class="receive-remove" data-remove-receive="${i}">删除</button>`:''}</div>
-          <div class="field"><label>无料名称</label><input class="input receive-name" data-index="${i}" value="${escapeHtml(item.name)}" placeholder="例如：虎小卡 / 贴纸套装"></div>
-          <div class="field"><label>数量</label><input class="input receive-qty" data-index="${i}" type="number" min="1" value="${item.qty||1}"></div>
-          <div class="field"><label>图片（可多选）</label><input class="input receive-files" data-index="${i}" type="file" accept="image/*" multiple><div class="multi-preview receive-preview" data-index="${i}" style="margin-top:8px">${(item.newImages.length?item.newImages:item.oldImages).map(img=>`<img src="${img}">`).join('')}</div></div>
-        </div>`).join('');
-      host.querySelectorAll('.receive-name').forEach(inp=>inp.addEventListener('input',()=>{editorState[Number(inp.dataset.index)].name=inp.value;}));
-      host.querySelectorAll('.receive-qty').forEach(inp=>inp.addEventListener('input',()=>{editorState[Number(inp.dataset.index)].qty=Math.max(1,Number(inp.value||1));}));
-      host.querySelectorAll('.receive-files').forEach(inp=>inp.addEventListener('change',async()=>{const idx=Number(inp.dataset.index);editorState[idx].newImages=await filesToDataURLs(inp.files);const preview=host.querySelector(`.receive-preview[data-index="${idx}"]`);if(preview)preview.innerHTML=editorState[idx].newImages.map(img=>`<img src="${img}">`).join('');}));
-      host.querySelectorAll('[data-remove-receive]').forEach(btn=>btn.addEventListener('click',()=>{editorState.splice(Number(btn.dataset.removeReceive),1);drawReceiveEditors();}));
+    const drawGiveItems=()=>{
+      const host=document.getElementById('give-items-editor');
+      if(!host)return;
+      host.innerHTML=giveState.map((g,i)=>{
+        const selectedValue=`${g.materialId||''}::${g.subItemId||''}`;
+        return `
+          <div class="give-item-editor">
+            <div class="editor-head">
+              <div class="editor-title">我的物料 ${i+1}</div>
+              ${giveState.length>1?`<button type="button" class="editor-remove" data-remove-give="${i}">删除</button>`:''}
+            </div>
+            <div class="field"><label>选择物料 / 子项</label>
+              <select class="give-choice" data-index="${i}">
+                ${choiceList.map(c=>`<option value="${c.value}" ${c.value===selectedValue?'selected':''}>${escapeHtml(c.label)}</option>`).join('')}
+              </select>
+            </div>
+            <div class="field"><label>数量</label><input class="input give-qty" data-index="${i}" type="number" min="1" value="${g.qty||1}"></div>
+          </div>`;
+      }).join('');
+
+      host.querySelectorAll('.give-choice').forEach(sel=>sel.addEventListener('change',()=>{
+        const idx=Number(sel.dataset.index);
+        const [materialId,subItemId]=sel.value.split('::');
+        giveState[idx].materialId=materialId;
+        giveState[idx].subItemId=subItemId||null;
+      }));
+      host.querySelectorAll('.give-qty').forEach(inp=>inp.addEventListener('input',()=>{
+        giveState[Number(inp.dataset.index)].qty=Math.max(1,Number(inp.value||1));
+      }));
+      host.querySelectorAll('[data-remove-give]').forEach(btn=>btn.addEventListener('click',()=>{
+        giveState.splice(Number(btn.dataset.removeGive),1);
+        drawGiveItems();
+      }));
     };
-    setTimeout(()=>{
-      drawReceiveEditors();
-      const addBtn=document.getElementById('add-receive-item'); if(addBtn)addBtn.onclick=()=>{editorState.push({name:'',qty:1,oldImages:[],newImages:[]});drawReceiveEditors();};
-      const delBtn=document.getElementById('delete-exchange'); if(delBtn)delBtn.onclick=async()=>{await del('exchanges',current.id);modal.close();render();};
-    },0);
+
     saveHandler=async()=>{
       const f=new FormData(document.getElementById('modal-form'));
       const obj=current||{id:uid('x'),createdAt:new Date().toISOString(),completedAt:null};
-      obj.partnerName=f.get('partnerName');obj.partnerWechat=f.get('partnerWechat');obj.eventId=f.get('eventId');
-      obj.give=[{materialId:f.get('materialId'),qty:Number(f.get('giveQty')||1)}];
-      obj.receiveItems=editorState.filter(item=>item.name.trim()||item.oldImages.length||item.newImages.length).map(item=>({name:item.name.trim()||'未命名无料',qty:Math.max(1,Number(item.qty||1)),images:item.newImages.length?item.newImages:item.oldImages}));
-      if(!obj.receiveItems.length)obj.receiveItems=[{name:'未命名无料',qty:1,images:[]}];
+      const files=document.getElementById('receive-images')?.files;
+      const newImgs=files?.length?await filesToDataURLs(files):[];
+      const oldImgs=current?.receiveItems?.[0]?.images||[];
+
+      obj.partnerName=f.get('partnerName');
+      obj.partnerWechat=f.get('partnerWechat');
+      obj.eventId=f.get('eventId');
+      obj.give=giveState
+        .filter(g=>g.materialId)
+        .map(g=>({materialId:g.materialId,subItemId:g.subItemId||null,qty:Math.max(1,Number(g.qty||1))}));
+      obj.receiveItems=[{name:f.get('receiveName'),images:newImgs.length?newImgs:oldImgs,qty:Number(f.get('receiveQty')||1)}];
       obj.place=f.get('place');obj.time=f.get('time');obj.note=f.get('note');obj.status=f.get('status');
-      if(obj.status==='done'&&!obj.completedAt)obj.completedAt=new Date().toISOString();if(obj.status!=='done')obj.completedAt=null;
+      if(obj.status==='done'&&!obj.completedAt)obj.completedAt=new Date().toISOString();
+      if(obj.status!=='done')obj.completedAt=null;
       await put('exchanges',obj);
     };
+
+    setTimeout(()=>{
+      drawGiveItems();
+      const addBtn=document.getElementById('add-give-item');
+      if(addBtn)addBtn.onclick=()=>{
+        const first=choiceList[0]?.value||'::';
+        const [materialId,subItemId]=first.split('::');
+        giveState.push({materialId,subItemId:subItemId||null,qty:1});
+        drawGiveItems();
+      };
+
+      const inp=document.getElementById('receive-images');
+      if(inp) inp.addEventListener('change',async()=>{
+        const urls=await filesToDataURLs(inp.files);
+        document.getElementById('receive-preview').innerHTML=urls.map(u=>`<img src="${u}">`).join('');
+      });
+      const delBtn=document.getElementById('delete-exchange');
+      if(delBtn) delBtn.onclick=async()=>{await del('exchanges',current.id);modal.close();render();};
+    },0);
   }
 
   if(action==='new-squat'||action==='edit-squat'){
@@ -858,8 +1016,8 @@ window.addEventListener('offline',()=>document.getElementById('offline-status').
 (async()=>{
   if('caches' in window){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-3').map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-4').map(k=>caches.delete(k)));
   }
   db=await openDB();await render();
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.3').catch(()=>{});
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.4').catch(()=>{});
 })();
