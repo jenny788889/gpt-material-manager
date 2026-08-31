@@ -155,3 +155,37 @@ textarea{
   min-width:0;
   max-width:100%;
 }
+
+
+/* V2.4.2：iOS PWA 输入聚焦不自动放大 */
+html, body{
+  -webkit-text-size-adjust:100% !important;
+  text-size-adjust:100% !important;
+}
+input,
+textarea,
+select{
+  font-size:16px !important;
+  line-height:1.4 !important;
+  touch-action:manipulation;
+}
+input::placeholder,
+textarea::placeholder{
+  font-size:16px !important;
+}
+input[type="date"],
+input[type="time"],
+input[type="number"],
+input[type="text"],
+input[type="search"],
+input[type="file"],
+select,
+textarea{
+  width:100%;
+  min-width:0;
+  max-width:100%;
+}
+dialog,
+.modal-card{
+  max-width:calc(100vw - 24px);
+}

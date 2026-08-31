@@ -1,3 +1,6 @@
+V2.4.2 修复：进一步阻止 iPhone/PWA 点击输入框时自动缩放。
+处理：viewport 锁定、所有表单控件 16px、iOS standalone meta、表单宽度保护。
+
 V2.4.1 修复：iPhone Safari 输入文字时页面自动放大。
 
 GPT老师の物料管理器

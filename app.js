@@ -853,8 +853,8 @@ window.addEventListener('offline',()=>document.getElementById('offline-status').
 (async()=>{
   if('caches' in window){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-1').map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-2').map(k=>caches.delete(k)));
   }
   db=await openDB();await render();
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.1').catch(()=>{});
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.2').catch(()=>{});
 })();
