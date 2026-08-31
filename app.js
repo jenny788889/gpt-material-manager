@@ -221,7 +221,7 @@ async function exportExcel(){
     ]},
     {name:'互换',rows:[
       ['内部ID','对方昵称','微信号','场次ID','我给物料ID','我给数量','对方无料名称','对方数量','地点','时间','状态','备注','对方图片数量'],
-      ...exchanges.map(x=>[x.id,x.partnerName||'',x.partnerWechat||'',x.eventId||'',x.give?.[0]?.materialId||'',Number(x.give?.[0]?.qty||0),x.receiveItems?.[0]?.name||'',Number(x.receiveItems?.[0]?.qty||0),x.place||'',x.time||'',exchangeStatus[x.status]||x.status||'',x.note||'',x.receiveItems?.[0]?.images?.length||0])
+      ...exchanges.map(x=>[x.id,x.partnerName||'',x.partnerWechat||'',x.eventId||'',x.give?.[0]?.materialId||'',Number(x.give?.[0]?.qty||0),(x.receiveItems||[]).map(r=>r.name||'').join('；'),(x.receiveItems||[]).map(r=>Number(r.qty||1)).join('；'),x.place||'',x.time||'',exchangeStatus[x.status]||x.status||'',x.note||'',(x.receiveItems||[]).reduce((n,r)=>n+(r.images?.length||0),0)])
     ]},
     {name:'蹲蹲',rows:[
       ['内部ID','老师昵称','小红书','场次ID','地点','时间','领取条件','状态','备注','OOTD是否有图','无料图片数量'],
@@ -571,7 +571,7 @@ async function renderExchanges(view){
           <div class="item-main">
             <div class="item-title">${escapeHtml(x.partnerName||'未命名')}</div>
             <div class="sub">${escapeHtml(ev?.name||'未绑定场次')} · ${escapeHtml(x.place||'未填地点')}</div>
-            <div class="sub">${(x.receiveItems||[]).map(r=>escapeHtml(r.name)).join('、')||'未填写对方物料'}</div>
+            <div class="receive-summary">${(x.receiveItems||[]).length ? (x.receiveItems||[]).map(r=>`<span class="receive-chip">${escapeHtml(r.name||'未命名')} ×${Number(r.qty||1)}</span>`).join('') : '<span class="sub">未填写对方物料</span>'}</div>
           </div>
           <div class="badge">${statusLabel(x.status)}</div>
         </div>`));
@@ -753,48 +753,53 @@ async function openModal(action,id=null){
   if(action==='new-exchange'||action==='edit-exchange'){
     const current=action==='edit-exchange'?await getOne('exchanges',id):null;
     title.textContent=current?'编辑互换':'新建互换';
-    const receive=current?.receiveItems?.[0]||{name:'',images:[],qty:1};
+    let receiveItems=(current?.receiveItems||[]).map(r=>({name:r.name||'',qty:Number(r.qty||1),images:r.images||(r.image?[r.image]:[])}));
+    if(!receiveItems.length && current?.receive?.length) receiveItems=current.receive.map(r=>({name:'对方物料',qty:Number(r.qty||1),images:[]}));
+    if(!receiveItems.length) receiveItems=[{name:'',qty:1,images:[]}];
+
     body.innerHTML=`
       <div class="field"><label>对方微信昵称 / 备注</label><input class="input" name="partnerName" value="${escapeHtml(current?.partnerName||'')}" placeholder="例如：77"></div>
       <div class="field"><label>微信号（可选）</label><input class="input" name="partnerWechat" value="${escapeHtml(current?.partnerWechat||'')}"></div>
       <div class="field"><label>场次</label><select name="eventId">${events.map(ev=>`<option value="${ev.id}" ${current?.eventId===ev.id?'selected':''}>${escapeHtml(ev.name)}</option>`).join('')}</select></div>
       <div class="field"><label>我给她</label><select name="materialId">${materials.map(m=>`<option value="${m.id}" ${current?.give?.[0]?.materialId===m.id?'selected':''}>${escapeHtml(m.name)}</option>`).join('')}</select></div>
-      <div class="field"><label>数量</label><input class="input" name="giveQty" type="number" min="1" value="${current?.give?.[0]?.qty||1}"></div>
-      <div class="field"><label>她给我：物料名称</label><input class="input" name="receiveName" value="${escapeHtml(receive.name||'')}" placeholder="例如：虎小卡"></div>
-      <div class="field"><label>对方无料图片（可一次多选，张数不做人为限制）</label>
-        <input class="input" name="receiveImages" id="receive-images" type="file" accept="image/*" multiple>
-        <div class="multi-preview" id="receive-preview" style="margin-top:8px">${(receive.images||[]).map(img=>`<img src="${img}">`).join('')}</div>
-      </div>
-      <div class="field"><label>数量</label><input class="input" name="receiveQty" type="number" min="1" value="${receive.qty||1}"></div>
+      <div class="field"><label>我给数量</label><input class="input" name="giveQty" type="number" min="1" value="${current?.give?.[0]?.qty||1}"></div>
+      <div class="field"><label>她给我的无料</label><div id="receive-items-editor"></div><button type="button" class="receive-add" id="add-receive-item">＋ 添加对方无料</button></div>
       <div class="row"><div class="field"><label>交换地点</label><input class="input" name="place" value="${escapeHtml(current?.place||'')}" placeholder="例如：F6场内"></div><div class="field"><label>时间</label><input class="input" name="time" type="time" value="${current?.time||''}"></div></div>
       <div class="field"><label>现场备注</label><textarea name="note">${escapeHtml(current?.note||'')}</textarea></div>
-      <div class="field"><label>状态</label><select name="status">
-        ${[['booked','已约定'],['onsite','待交换'],['done','已完成'],['cancelled','已取消']].map(([v,l])=>`<option value="${v}" ${(current?.status||'onsite')===v?'selected':''}>${l}</option>`).join('')}
-      </select></div>
+      <div class="field"><label>状态</label><select name="status">${[['booked','已约定'],['onsite','待交换'],['done','已完成'],['cancelled','已取消']].map(([v,l])=>`<option value="${v}" ${(current?.status||'onsite')===v?'selected':''}>${l}</option>`).join('')}</select></div>
       ${current?'<button type="button" class="danger" id="delete-exchange">删除互换</button>':''}`;
+
+    const editorState=receiveItems.map(item=>({name:item.name||'',qty:Number(item.qty||1),oldImages:[...(item.images||[])],newImages:[]}));
+    const drawReceiveEditors=()=>{
+      const host=document.getElementById('receive-items-editor'); if(!host)return;
+      host.innerHTML=editorState.map((item,i)=>`
+        <div class="receive-item-editor" data-receive-index="${i}">
+          <div class="receive-item-head"><div class="receive-item-title">无料 ${i+1}</div>${editorState.length>1?`<button type="button" class="receive-remove" data-remove-receive="${i}">删除</button>`:''}</div>
+          <div class="field"><label>无料名称</label><input class="input receive-name" data-index="${i}" value="${escapeHtml(item.name)}" placeholder="例如：虎小卡 / 贴纸套装"></div>
+          <div class="field"><label>数量</label><input class="input receive-qty" data-index="${i}" type="number" min="1" value="${item.qty||1}"></div>
+          <div class="field"><label>图片（可多选）</label><input class="input receive-files" data-index="${i}" type="file" accept="image/*" multiple><div class="multi-preview receive-preview" data-index="${i}" style="margin-top:8px">${(item.newImages.length?item.newImages:item.oldImages).map(img=>`<img src="${img}">`).join('')}</div></div>
+        </div>`).join('');
+      host.querySelectorAll('.receive-name').forEach(inp=>inp.addEventListener('input',()=>{editorState[Number(inp.dataset.index)].name=inp.value;}));
+      host.querySelectorAll('.receive-qty').forEach(inp=>inp.addEventListener('input',()=>{editorState[Number(inp.dataset.index)].qty=Math.max(1,Number(inp.value||1));}));
+      host.querySelectorAll('.receive-files').forEach(inp=>inp.addEventListener('change',async()=>{const idx=Number(inp.dataset.index);editorState[idx].newImages=await filesToDataURLs(inp.files);const preview=host.querySelector(`.receive-preview[data-index="${idx}"]`);if(preview)preview.innerHTML=editorState[idx].newImages.map(img=>`<img src="${img}">`).join('');}));
+      host.querySelectorAll('[data-remove-receive]').forEach(btn=>btn.addEventListener('click',()=>{editorState.splice(Number(btn.dataset.removeReceive),1);drawReceiveEditors();}));
+    };
+    setTimeout(()=>{
+      drawReceiveEditors();
+      const addBtn=document.getElementById('add-receive-item'); if(addBtn)addBtn.onclick=()=>{editorState.push({name:'',qty:1,oldImages:[],newImages:[]});drawReceiveEditors();};
+      const delBtn=document.getElementById('delete-exchange'); if(delBtn)delBtn.onclick=async()=>{await del('exchanges',current.id);modal.close();render();};
+    },0);
     saveHandler=async()=>{
       const f=new FormData(document.getElementById('modal-form'));
       const obj=current||{id:uid('x'),createdAt:new Date().toISOString(),completedAt:null};
-      const files=document.getElementById('receive-images')?.files;
-      const newImgs=files?.length?await filesToDataURLs(files):[];
-      const oldImgs=current?.receiveItems?.[0]?.images||[];
       obj.partnerName=f.get('partnerName');obj.partnerWechat=f.get('partnerWechat');obj.eventId=f.get('eventId');
       obj.give=[{materialId:f.get('materialId'),qty:Number(f.get('giveQty')||1)}];
-      obj.receiveItems=[{name:f.get('receiveName'),images:newImgs.length?newImgs:oldImgs,qty:Number(f.get('receiveQty')||1)}];
+      obj.receiveItems=editorState.filter(item=>item.name.trim()||item.oldImages.length||item.newImages.length).map(item=>({name:item.name.trim()||'未命名无料',qty:Math.max(1,Number(item.qty||1)),images:item.newImages.length?item.newImages:item.oldImages}));
+      if(!obj.receiveItems.length)obj.receiveItems=[{name:'未命名无料',qty:1,images:[]}];
       obj.place=f.get('place');obj.time=f.get('time');obj.note=f.get('note');obj.status=f.get('status');
-      if(obj.status==='done'&&!obj.completedAt)obj.completedAt=new Date().toISOString();
-      if(obj.status!=='done')obj.completedAt=null;
+      if(obj.status==='done'&&!obj.completedAt)obj.completedAt=new Date().toISOString();if(obj.status!=='done')obj.completedAt=null;
       await put('exchanges',obj);
     };
-    setTimeout(()=>{
-      const inp=document.getElementById('receive-images');
-      if(inp) inp.addEventListener('change',async()=>{
-        const urls=await filesToDataURLs(inp.files);
-        document.getElementById('receive-preview').innerHTML=urls.map(u=>`<img src="${u}">`).join('');
-      });
-      const delBtn=document.getElementById('delete-exchange');
-      if(delBtn) delBtn.onclick=async()=>{await del('exchanges',current.id);modal.close();render();};
-    },0);
   }
 
   if(action==='new-squat'||action==='edit-squat'){
@@ -853,8 +858,8 @@ window.addEventListener('offline',()=>document.getElementById('offline-status').
 (async()=>{
   if('caches' in window){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-2').map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-3').map(k=>caches.delete(k)));
   }
   db=await openDB();await render();
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.2').catch(()=>{});
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.3').catch(()=>{});
 })();
