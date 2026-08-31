@@ -132,3 +132,26 @@ dialog::backdrop{background:rgba(17,24,39,.35)}
 }
 .data-message.ok{color:#067647}
 .data-message.error{color:#b42318}
+
+
+/* V2.4.1：修复 iPhone Safari 点击输入框时页面自动放大 */
+html{
+  -webkit-text-size-adjust:100%;
+  text-size-adjust:100%;
+}
+input,
+select,
+textarea{
+  font-size:16px !important;
+}
+input[type="date"],
+input[type="time"],
+input[type="number"],
+input[type="text"],
+input[type="search"],
+input[type="file"],
+select,
+textarea{
+  min-width:0;
+  max-width:100%;
+}
