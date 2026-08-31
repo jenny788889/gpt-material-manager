@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+  <meta name="theme-color" content="#ffffff">
+  <title>GPT老师の物料管理器</title>
+  <link rel="manifest" href="manifest.json">
+  <link rel="stylesheet" href="style.css?v=2.4">
+</head>
+<body>
+  <div id="app">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">GPT老师の物料管理器</div>
+        <h1 id="page-title">首页</h1>
+      </div>
+      <div class="status" id="offline-status">离线可用</div>
+    </header>
+
+    <main id="view"></main>
+
+    <nav class="tabbar">
+      <button data-route="home" class="active">首页</button>
+      <button data-route="materials">我的物料</button>
+      <button data-route="exchanges">互换</button>
+      <button data-route="squats">蹲蹲</button>
+    </nav>
+  </div>
+
+  <template id="home-template">
+    <section class="stack">
+      <div class="version-banner">当前版本：V2.4 · 倒计时 / 蹲蹲 / 互换编辑 / 对方多图</div>
+
+      <div class="countdown-card">
+        <div class="countdown-top">
+          <div>
+            <div class="label">距离 <span id="countdown-event-name">下一场演唱会</span> 还有</div>
+            <div class="countdown-days"><span id="countdown-days">--</span><small>DAYS</small></div>
+          </div>
+          <select id="home-event-select" class="compact-select"></select>
+        </div>
+        <div id="countdown-message" class="countdown-message">无料可以慢慢准备</div>
+        <div id="countdown-meta" class="sub">--</div>
+      </div>
+
+      <div class="metrics metrics-4">
+        <button class="metric-card" data-home-shortcut="materials"><strong id="m-materials">0</strong><span>我的物料</span></button>
+        <button class="metric-card" data-home-shortcut="pending"><strong id="m-pending">0</strong><span>待交换</span></button>
+        <button class="metric-card" data-home-shortcut="squats"><strong id="m-squats">0</strong><span>蹲蹲</span></button>
+        <button class="metric-card" data-home-shortcut="events"><strong id="m-events">0</strong><span>场次</span></button>
+      </div>
+
+      <div class="section-head">
+        <h3>场次管理</h3>
+        <button class="mini" data-action="new-event">＋ 新建场次</button>
+      </div>
+      <div id="home-events-list" class="stack-sm"></div>
+
+      <div class="section-head"><h3>快速操作</h3></div>
+      <div class="grid-2">
+        <button class="action-card" data-action="new-material">＋ 新建物料</button>
+        <button class="action-card" data-action="new-exchange">＋ 新建互换</button>
+        <button class="action-card" data-action="new-squat">＋ 新建蹲蹲</button>
+        <button class="action-card" data-route-jump="exchanges" data-onsite="1">进入现场模式</button>
+      </div>
+
+      <div class="section-head"><h3>数据管理</h3></div>
+      <div class="data-panel">
+        <div class="small-note">
+          Excel 适合整理/批量导入数据；完整备份会把物料图、OOTD、对方无料图一起保存。
+        </div>
+        <div class="field">
+          <label>Excel 导入方式</label>
+          <select id="excel-import-mode">
+            <option value="append">新增，不覆盖现有数据</option>
+            <option value="merge">按内部 ID 合并 / 更新</option>
+            <option value="replace">清空业务数据后导入</option>
+          </select>
+        </div>
+        <div class="grid-2">
+          <button class="secondary" type="button" data-data-action="export-excel">导出 Excel</button>
+          <button class="secondary" type="button" data-data-action="import-excel">导入 Excel</button>
+          <button class="secondary" type="button" data-data-action="export-backup">完整备份</button>
+          <button class="secondary" type="button" data-data-action="import-backup">恢复备份</button>
+        </div>
+        <input id="excel-file-input" type="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" hidden>
+        <input id="backup-file-input" type="file" accept=".json,application/json" hidden>
+        <div id="data-message" class="data-message" aria-live="polite"></div>
+      </div>
+    </section>
+  </template>
+
+  <template id="materials-template">
+    <section class="stack">
+      <div class="version-banner">我的物料 · 支持图片 / 多场次 / 编辑</div>
+      <div class="section-head">
+        <h3>我的物料</h3>
+        <button class="mini" data-action="new-material">＋ 新建</button>
+      </div>
+      <div id="materials-list" class="stack-sm"></div>
+    </section>
+  </template>
+
+  <template id="exchanges-template">
+    <section class="stack">
+      <div class="version-banner">互换 · 可编辑 · 对方无料支持多图</div>
+      <div class="section-head">
+        <h3>互换</h3>
+        <button class="mini" data-action="new-exchange">＋ 新建</button>
+      </div>
+
+      <button class="onsite-entry" data-view="onsite">
+        <div>
+          <div class="onsite-entry-title">现场模式</div>
+          <div class="onsite-entry-sub">固定单一场次 · 快速找人 / 看地点 / 完成交换</div>
+        </div>
+        <div class="onsite-entry-arrow">→</div>
+      </button>
+
+      <div class="segmented">
+        <button class="active" data-view="all">全部</button>
+        <button data-view="pending">待交换</button>
+        <button data-view="done">已完成</button>
+      </div>
+
+      <select id="exchange-event-filter" class="input"></select>
+      <input id="exchange-search" class="input" placeholder="搜索微信昵称 / 物料 / 地点">
+
+      <div id="exchanges-list" class="stack-sm"></div>
+    </section>
+  </template>
+
+  <template id="squats-template">
+    <section class="stack">
+      <div class="version-banner">蹲蹲 · 老师卡片 / OOTD / 小红书 / 无料多图</div>
+      <div class="section-head">
+        <h3>蹲蹲</h3>
+        <button class="mini" data-action="new-squat">＋ 新建</button>
+      </div>
+      <select id="squat-event-filter" class="input"></select>
+      <div class="segmented">
+        <button class="active" data-squat-filter="all">全部</button>
+        <button data-squat-filter="want">想蹲</button>
+        <button data-squat-filter="got">已拿到</button>
+        <button data-squat-filter="missed">没拿到</button>
+      </div>
+      <div id="squats-list" class="stack-sm"></div>
+    </section>
+  </template>
+
+  <dialog id="modal">
+    <form method="dialog" id="modal-form" class="modal-card">
+      <div class="section-head">
+        <h3 id="modal-title">新建</h3>
+        <button value="cancel" class="icon-btn">✕</button>
+      </div>
+      <div id="modal-body" class="stack-sm"></div>
+      <button id="modal-save" value="default" class="primary">保存</button>
+    </form>
+  </dialog>
+
+  <script src="app.js?v=2.4"></script>
+</body>
+</html>

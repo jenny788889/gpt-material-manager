@@ -1,0 +1,9 @@
+{
+  "name": "GPT老师の物料管理器",
+  "short_name": "GPT老师物料",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#f6f7fb",
+  "theme_color": "#ffffff",
+  "icons": []
+}
