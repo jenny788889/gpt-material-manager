@@ -66,6 +66,29 @@ function materialChoices(materials){
   });
   return out;
 }
+
+function ensureImageLightbox(){
+  let box=document.getElementById('image-lightbox');
+  if(box) return box;
+  box=document.createElement('div');
+  box.id='image-lightbox';
+  box.className='image-lightbox';
+  box.innerHTML=`<div class="image-lightbox-inner">
+    <button type="button" class="image-lightbox-close" aria-label="关闭">×</button>
+    <img id="image-lightbox-img" alt="大图预览">
+  </div>`;
+  document.body.appendChild(box);
+  box.addEventListener('click',e=>{
+    if(e.target===box || e.target.closest('.image-lightbox-close')) box.classList.remove('open');
+  });
+  return box;
+}
+function openImageLightbox(src){
+  const box=ensureImageLightbox();
+  const img=box.querySelector('#image-lightbox-img');
+  img.src=src;
+  box.classList.add('open');
+}
 function countdownInfo(dateStr){
   if(!dateStr) return {days:null,msg:'还没有设置场次日期'};
   const p=dateStr.split('-').map(Number);
@@ -232,8 +255,8 @@ async function exportExcel(){
   const squatStatus={want:'想蹲',got:'已拿到',missed:'没拿到'};
   const sheets=[
     {name:'场次',rows:[
-      ['内部ID','场次名称','日期','城市','场馆'],
-      ...events.map(e=>[e.id,e.name,e.date,e.city,e.venue])
+      ['内部ID','场次名称','日期','城市','场馆','倒计时提示'],
+      ...events.map(e=>[e.id,e.name,e.date,e.city,e.venue,e.countdownMessage||''])
     ]},
     {name:'我的物料',rows:[
       ['内部ID','名称','总量','预留','发放方式','伸手计划量','伸手已发','库存模式','制作状态','绑定场次ID','备注','图片数量','子项数量','子项明细'],
@@ -367,7 +390,7 @@ async function importExcelFile(file,mode){
   }
   for(const r of eventRows){
     const old=r['内部ID']||'';const id=await newId('events','ev',old);maps.events[old]=id;
-    await put('events',{id,name:r['场次名称']||'未命名场次',date:r['日期']||'',city:r['城市']||'',venue:r['场馆']||'',pinned:false});
+    await put('events',{id,name:r['场次名称']||'未命名场次',date:r['日期']||'',city:r['城市']||'',venue:r['场馆']||'',countdownMessage:r['倒计时提示']||'',pinned:false});
   }
   for(const r of materialRows){
     const old=r['内部ID']||'';const id=await newId('materials','mat',old);maps.materials[old]=id;
@@ -444,7 +467,7 @@ async function renderHome(view){
     const c=countdownInfo(current.date);
     document.getElementById('countdown-event-name').textContent=current.name;
     document.getElementById('countdown-days').textContent=c.days===null?'--':Math.max(c.days,0);
-    document.getElementById('countdown-message').textContent=c.msg;
+    document.getElementById('countdown-message').textContent=(current.countdownMessage||'').trim() || c.msg;
     document.getElementById('countdown-meta').textContent=[current.date,current.city,current.venue].filter(Boolean).join(' · ');
   }else{
     document.getElementById('countdown-message').textContent='先新增一个场次吧';
@@ -587,14 +610,15 @@ async function renderExchanges(view){
             <div class="people">${escapeHtml(x.partnerName||'未命名')}</div>
             <div class="location-pill">${escapeHtml(x.place||'未填地点')}</div>
           </div>
-          <div class="sub">${x.time?`🕒 ${escapeHtml(x.time)}`:'未填时间'}${x.partnerWechat?` · 微信 ${escapeHtml(x.partnerWechat)}`:''}</div>
+          ${x.partnerWechat?`<div class="onsite-meta">微信：${escapeHtml(x.partnerWechat)}</div>`:''}
+          ${x.time?`<div class="onsite-meta">🕒 ${escapeHtml(x.time)}</div>`:''}
+          ${x.note?`<div class="onsite-note">备注：${escapeHtml(x.note)}</div>`:''}
           <div class="exchange-visual">
             <div class="exchange-box"><strong>我给</strong>${give||'-'}</div>
             <div>⇄</div>
             <div class="exchange-box"><strong>她给</strong>${recv||'-'}</div>
           </div>
-          <div class="small-note">${escapeHtml(x.note||'无现场备注')}</div>
-          <button class="primary" data-complete="${x.id}" style="margin-top:12px">✓ 完成交换</button>
+          <button class="primary" data-complete="${x.id}" style="margin-top:10px">✓ 完成交换</button>
         </div>`));
       });
     }else{
@@ -642,16 +666,16 @@ async function renderSquats(view){
     if(!rows.length){list.append(el('<div class="small-note">还没有蹲蹲记录。</div>'));return;}
     rows.forEach(s=>{
       const ev=events.find(e=>e.id===s.eventId);
-      const freebies=(s.freebieImages||[]).slice(0,6).map(img=>`<img src="${img}" alt="无料图片">`).join('');
+      const freebies=(s.freebieImages||[]).slice(0,6).map(img=>`<img src="${img}" alt="无料图片" class="image-lightbox-trigger" data-preview-src="${img}">`).join('');
       list.append(el(`<div class="squat-card clickable" data-edit-squat="${s.id}">
         <div class="squat-top">
           <div>
             <div class="squat-name">${escapeHtml(s.teacherName||'未命名老师')}</div>
             <div class="sub">${s.xhs?`小红书：${escapeHtml(s.xhs)}`:'未填小红书'}${ev?` · ${escapeHtml(ev.name)}`:''}</div>
+            <div class="squat-status-inline">状态：${squatStatusLabel(s.status)}${s.time?` · 🕒 ${escapeHtml(s.time)}`:''}</div>
           </div>
-          <div class="badge">${squatStatusLabel(s.status)}</div>
+          <div class="squat-location">${escapeHtml(s.place||'未填地点')}</div>
         </div>
-        <div class="sub" style="margin-top:8px">📍 ${escapeHtml(s.place||'未填地点')} ${s.time?`· 🕒 ${escapeHtml(s.time)}`:''}</div>
         <div class="squat-body-v231">
           <div class="freebie-main">
             <div class="label" style="margin-bottom:6px">无料</div>
@@ -661,7 +685,7 @@ async function renderSquats(view){
           ${s.ootdImage?`
           <div class="ootd-side">
             <div class="label" style="margin-bottom:6px">OOTD</div>
-            <div class="ootd-box"><img src="${s.ootdImage}" alt="老师 OOTD"></div>
+            <div class="ootd-box"><img src="${s.ootdImage}" alt="老师 OOTD" class="image-lightbox-trigger" data-preview-src="${s.ootdImage}"></div>
           </div>`:''}
         </div>
       </div>`));
@@ -677,6 +701,13 @@ async function renderSquats(view){
 
 document.querySelectorAll('.tabbar button').forEach(b=>b.addEventListener('click',()=>{route=b.dataset.route;render()}));
 document.addEventListener('click',e=>{
+  const preview=e.target.closest('.image-lightbox-trigger');
+  if(preview){
+    e.preventDefault();
+    e.stopPropagation();
+    openImageLightbox(preview.dataset.previewSrc);
+    return;
+  }
   const dataAction=e.target.closest('[data-data-action]')?.dataset.dataAction;
   if(dataAction){
     if(dataAction==='export-excel'){exportExcel().catch(err=>dataMessage(err.message,'error'));return;}
@@ -721,11 +752,16 @@ async function openModal(action,id=null){
     body.innerHTML=`
       <div class="field"><label>场次名称</label><input class="input" name="name" value="${escapeHtml(current?.name||'')}" placeholder="例如：PLAVE 仁川 D1"></div>
       <div class="row"><div class="field"><label>日期</label><input class="input" name="date" type="date" value="${current?.date||''}"></div><div class="field"><label>城市</label><input class="input" name="city" value="${escapeHtml(current?.city||'')}"></div></div>
-      <div class="field"><label>场馆</label><input class="input" name="venue" value="${escapeHtml(current?.venue||'')}"></div>`;
+      <div class="field"><label>场馆</label><input class="input" name="venue" value="${escapeHtml(current?.venue||'')}"></div>
+      <div class="field"><label>首页倒计时提示（可选）</label>
+        <input class="input" name="countdownMessage" value="${escapeHtml(current?.countdownMessage||'')}" placeholder="例如：无料真的要开始滑铲了啊啊啊">
+        <div class="small-note" style="margin-top:6px">留空时会继续使用系统根据剩余天数自动生成的提示。</div>
+      </div>`;
     saveHandler=async()=>{
       const f=new FormData(document.getElementById('modal-form'));
       const obj=current||{id:uid('ev'),pinned:false};
       obj.name=f.get('name');obj.date=f.get('date');obj.city=f.get('city');obj.venue=f.get('venue');
+      obj.countdownMessage=f.get('countdownMessage')||'';
       await put('events',obj);if(!homeEventId) homeEventId=obj.id;
     };
   }
@@ -1012,12 +1048,18 @@ async function openModal(action,id=null){
 
 window.addEventListener('online',()=>document.getElementById('offline-status').textContent='在线');
 window.addEventListener('offline',()=>document.getElementById('offline-status').textContent='离线可用');
+window.addEventListener('keydown',e=>{
+  if(e.key==='Escape'){
+    const box=document.getElementById('image-lightbox');
+    if(box) box.classList.remove('open');
+  }
+});
 
 (async()=>{
   if('caches' in window){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!=='xingyu-v2-4-4').map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!=='xingyu-v2-5-0').map(k=>caches.delete(k)));
   }
   db=await openDB();await render();
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.4.4').catch(()=>{});
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.5.0').catch(()=>{});
 })();

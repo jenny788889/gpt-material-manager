@@ -251,3 +251,93 @@ dialog,
   border-radius:9px;
   background:#eee;
 }
+
+/* V2.4.5：现场模式信息层级优化 */
+.onsite-card .exchange-visual{gap:8px;margin:10px 0}
+.onsite-card .exchange-box{min-height:68px;padding:10px 12px;font-size:14px;line-height:1.45}
+.onsite-card .exchange-box strong{font-size:13px;margin-bottom:4px;color:#4b5563}
+.onsite-note{margin:10px 0;padding:10px 12px;border-radius:12px;background:#fff7ed;color:#9a3412;font-size:13px;line-height:1.4;font-weight:700}
+.onsite-meta{font-size:12px;color:var(--muted);margin-top:5px}
+.location-pill{font-size:12px;font-weight:800}
+
+/* V2.4.6：蹲蹲卡片右上角显示地点，状态降级 */
+.squat-location{
+  font-size:12px;
+  font-weight:800;
+  padding:6px 9px;
+  border-radius:999px;
+  background:#f3f4f6;
+  color:#111827;
+  white-space:nowrap;
+}
+.squat-status-inline{
+  display:inline-block;
+  margin-top:5px;
+  font-size:11px;
+  color:var(--muted);
+}
+
+/* V2.4.7：蹲蹲图片点击弹窗 */
+.freebie-grid img,
+.ootd-box img{
+  cursor:zoom-in;
+}
+.image-lightbox{
+  position:fixed;
+  inset:0;
+  background:rgba(17,24,39,.82);
+  display:none;
+  align-items:center;
+  justify-content:center;
+  z-index:9999;
+  padding:18px;
+}
+.image-lightbox.open{
+  display:flex;
+}
+.image-lightbox-inner{
+  position:relative;
+  max-width:min(92vw,720px);
+  max-height:88vh;
+  width:100%;
+  display:flex;
+  align-items:center;
+  justify-content:center;
+}
+.image-lightbox img{
+  max-width:100%;
+  max-height:88vh;
+  object-fit:contain;
+  border-radius:16px;
+  background:#fff;
+}
+.image-lightbox-close{
+  position:absolute;
+  top:-12px;
+  right:-4px;
+  border:0;
+  width:38px;
+  height:38px;
+  border-radius:999px;
+  background:rgba(255,255,255,.95);
+  color:#111827;
+  font-size:22px;
+  line-height:1;
+  font-weight:700;
+}
+
+/* V2.4.9：底部导航更适合手机点击 */
+.tabbar{
+  gap:2px;
+  padding:10px 8px calc(10px + env(safe-area-inset-bottom));
+}
+.tabbar button{
+  min-height:48px;
+  padding:12px 6px;
+  font-size:15px;
+  line-height:1.2;
+  border-radius:12px;
+}
+.tabbar button.active{
+  font-weight:800;
+}
