@@ -661,7 +661,7 @@ async function renderExchanges(view){
             <div><strong>她给</strong><span>${recv||'-'}</span></div>
           </div>
           ${x.note?`<div class="exchange-list-note">备注：${escapeHtml(x.note)}</div>`:''}
-          ${isPending?`<button type="button" class="packing-toggle ${packed?'secondary-packed':''}" data-toggle-packing="${x.id}">${packed?'↩ 改为未打包':'📦 标记已打包'}</button>`:''}
+          ${isPending&&!packed?`<button type="button" class="packing-toggle" data-toggle-packing="${x.id}">📦 标记已打包</button>`:''}
         </div>`));
       });
     }
@@ -1106,8 +1106,8 @@ window.addEventListener('keydown',e=>{
 (async()=>{
   if('caches' in window){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!=='xingyu-v2-6-0').map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!=='xingyu-v2-6-1').map(k=>caches.delete(k)));
   }
   db=await openDB();await render();
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.6.0').catch(()=>{});
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.6.1').catch(()=>{});
 })();
