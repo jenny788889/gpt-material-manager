@@ -33,7 +33,7 @@
 
   <template id="home-template">
     <section class="stack">
-      <div class="version-banner">当前版本：V2.5.0 · 倒计时 / 蹲蹲 / 互换编辑 / 对方多图</div>
+      <div class="version-banner">当前版本：V2.6.0 · 互换打包状态 / 未打包筛选</div>
 
       <div class="countdown-card">
         <div class="countdown-top">
@@ -49,10 +49,19 @@
 
       <div class="metrics metrics-4">
         <button class="metric-card" data-home-shortcut="materials"><strong id="m-materials">0</strong><span>我的物料</span></button>
-        <button class="metric-card" data-home-shortcut="pending"><strong id="m-pending">0</strong><span>待交换</span></button>
+        <button class="metric-card metric-with-sub" data-home-shortcut="pending"><strong id="m-pending">0</strong><span>待交换</span><small id="m-unpacked">未打包 0</small></button>
         <button class="metric-card" data-home-shortcut="squats"><strong id="m-squats">0</strong><span>蹲蹲</span></button>
         <button class="metric-card" data-home-shortcut="events"><strong id="m-events">0</strong><span>场次</span></button>
       </div>
+
+      <button id="packing-home-card" class="packing-home-card" data-home-shortcut="unpacked" type="button">
+        <div class="packing-home-icon">📦</div>
+        <div class="packing-home-main">
+          <strong id="packing-home-title">待交换 0 · 其中未打包 0</strong>
+          <span id="packing-home-sub">有物料还没打包，快去处理吧～</span>
+        </div>
+        <span class="packing-home-action">去处理未打包</span>
+      </button>
 
       <div class="section-head">
         <h3>场次管理</h3>
@@ -107,7 +116,7 @@
 
   <template id="exchanges-template">
     <section class="stack">
-      <div class="version-banner">互换 · 可编辑 · 对方无料支持多图</div>
+      <div class="version-banner">互换 · 打包状态 / 快捷标记 / 现场模式</div>
       <div class="section-head">
         <h3>互换</h3>
         <button class="mini" data-action="new-exchange">＋ 新建</button>
@@ -124,6 +133,7 @@
       <div class="segmented">
         <button class="active" data-view="all">全部</button>
         <button data-view="pending">待交换</button>
+        <button data-view="unpacked">未打包</button>
         <button data-view="done">已完成</button>
       </div>
 
@@ -163,6 +173,6 @@
     </form>
   </dialog>
 
-  <script src="app.js?v=2.5.0"></script>
+  <script src="app.js?v=2.6.0"></script>
 </body>
 </html>

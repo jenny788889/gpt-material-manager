@@ -118,6 +118,7 @@ function migrateExchange(x, contacts, partnerMaterials){
     });
   }
   x.receiveItems=x.receiveItems.map(r=>({name:r.name||'对方物料',images:r.images||(r.image?[r.image]:[]),qty:Number(r.qty||1)}));
+  if(!x.packingStatus) x.packingStatus=x.status==='done'?'packed':'unpacked';
   return x;
 }
 
@@ -252,6 +253,7 @@ async function exportExcel(){
   const methodLabels={exchange:'互换',handout:'伸手',both:'互换+伸手',keep:'仅自留'};
   const inventoryLabels={shared:'共用总量',allocated:'按场次分配'};
   const exchangeStatus={booked:'已约定',onsite:'待交换',done:'已完成',cancelled:'已取消'};
+  const packingStatus={unpacked:'未打包',packed:'已打包'};
   const squatStatus={want:'想蹲',got:'已拿到',missed:'没拿到'};
   const sheets=[
     {name:'场次',rows:[
@@ -263,8 +265,8 @@ async function exportExcel(){
       ...materials.map(m=>[m.id,m.name,Number(m.qty||0),Number(m.reserved||0),methodLabels[m.distributionMethod||'exchange']||'',Number(m.handoutPlan||0),Number(m.handoutDone||0),inventoryLabels[m.inventoryMode]||'',m.status||'',(m.eventIds||[]).join(';'),m.note||'',m.image?1:0,(m.subItems||[]).length,(m.subItems||[]).map(s=>`${s.name}:${s.qty}`).join('；')])
     ]},
     {name:'互换',rows:[
-      ['内部ID','对方昵称','微信号','场次ID','我给物料ID','我给数量','对方无料名称','对方数量','地点','时间','状态','备注','对方图片数量'],
-      ...exchanges.map(x=>[x.id,x.partnerName||'',x.partnerWechat||'',x.eventId||'',x.give?.[0]?.materialId||'',Number(x.give?.[0]?.qty||0),x.receiveItems?.[0]?.name||'',Number(x.receiveItems?.[0]?.qty||0),x.place||'',x.time||'',exchangeStatus[x.status]||x.status||'',x.note||'',x.receiveItems?.[0]?.images?.length||0])
+      ['内部ID','对方昵称','微信号','场次ID','我给物料ID','我给数量','对方无料名称','对方数量','地点','时间','状态','打包状态','备注','对方图片数量'],
+      ...exchanges.map(x=>[x.id,x.partnerName||'',x.partnerWechat||'',x.eventId||'',x.give?.[0]?.materialId||'',Number(x.give?.[0]?.qty||0),x.receiveItems?.[0]?.name||'',Number(x.receiveItems?.[0]?.qty||0),x.place||'',x.time||'',exchangeStatus[x.status]||x.status||'',packingStatus[x.packingStatus||((x.status==='done')?'packed':'unpacked')]||'未打包',x.note||'',x.receiveItems?.[0]?.images?.length||0])
     ]},
     {name:'蹲蹲',rows:[
       ['内部ID','老师昵称','小红书','场次ID','地点','时间','领取条件','状态','备注','OOTD是否有图','无料图片数量'],
@@ -376,6 +378,7 @@ async function importExcelFile(file,mode){
   const methodLabels={exchange:'互换',handout:'伸手',both:'互换+伸手',keep:'仅自留'};
   const inventoryLabels={shared:'共用总量',allocated:'按场次分配'};
   const exchangeStatus={booked:'已约定',onsite:'待交换',done:'已完成',cancelled:'已取消'};
+  const packingStatus={unpacked:'未打包',packed:'已打包'};
   const squatStatus={want:'想蹲',got:'已拿到',missed:'没拿到'};
 
   if(mode==='replace'){
@@ -407,7 +410,9 @@ async function importExcelFile(file,mode){
       id,partnerName:r['对方昵称']||'',partnerWechat:r['微信号']||'',eventId:maps.events[r['场次ID']]||r['场次ID']||'',
       give:[{materialId:maps.materials[r['我给物料ID']]||r['我给物料ID']||'',qty:Number(r['我给数量']||1)}],
       receiveItems:[{name:r['对方无料名称']||'',images:[],qty:Number(r['对方数量']||1)}],
-      place:r['地点']||'',time:r['时间']||'',status:revMap(exchangeStatus,r['状态'])||'onsite',note:r['备注']||'',createdAt:new Date().toISOString(),completedAt:null
+      place:r['地点']||'',time:r['时间']||'',status:revMap(exchangeStatus,r['状态'])||'onsite',
+      packingStatus:revMap(packingStatus,r['打包状态'])||((revMap(exchangeStatus,r['状态'])||'onsite')==='done'?'packed':'unpacked'),
+      note:r['备注']||'',createdAt:new Date().toISOString(),completedAt:null
     });
   }
   for(const r of squatRows){
@@ -422,7 +427,7 @@ async function importExcelFile(file,mode){
 }
 async function exportBackup(){
   const payload={
-    format:'xingyu-material-backup',version:'2.4',exportedAt:new Date().toISOString(),
+    format:'xingyu-material-backup',version:'2.6',exportedAt:new Date().toISOString(),
     events:await getAll('events'),materials:await getAll('materials'),exchanges:await getAll('exchanges'),squats:await getAll('squats')
   };
   const d=new Date().toISOString().slice(0,10);
@@ -476,9 +481,18 @@ async function renderHome(view){
 
   const all=exchanges.map(x=>migrateExchange(x,contacts,partnerMaterials));
   document.getElementById('m-materials').textContent=materials.length;
-  document.getElementById('m-pending').textContent=all.filter(x=>(x.status==='booked'||x.status==='onsite') && (!homeEventId||x.eventId===homeEventId)).length;
+  const homePending=all.filter(x=>(x.status==='booked'||x.status==='onsite') && (!homeEventId||x.eventId===homeEventId));
+  const homeUnpacked=homePending.filter(x=>x.packingStatus!=='packed');
+  document.getElementById('m-pending').textContent=homePending.length;
+  document.getElementById('m-unpacked').textContent=`未打包 ${homeUnpacked.length}`;
   document.getElementById('m-squats').textContent=squats.filter(s=>s.status==='want' && (!homeEventId||s.eventId===homeEventId)).length;
   document.getElementById('m-events').textContent=events.length;
+  const packingCard=document.getElementById('packing-home-card');
+  if(packingCard){
+    document.getElementById('packing-home-title').textContent=`待交换 ${homePending.length} · 其中未打包 ${homeUnpacked.length}`;
+    document.getElementById('packing-home-sub').textContent=homeUnpacked.length?'有物料还没打包，快去处理吧～':'当前待交换都已经打包好啦 ✓';
+    packingCard.classList.toggle('all-packed',homeUnpacked.length===0);
+  }
 
   const list=document.getElementById('home-events-list');
   sorted.forEach(ev=>{
@@ -578,6 +592,7 @@ async function renderExchanges(view){
   function matchesView(x){
     if(exchangeView==='all') return true;
     if(exchangeView==='pending') return x.status==='booked'||x.status==='onsite';
+    if(exchangeView==='unpacked') return (x.status==='booked'||x.status==='onsite') && x.packingStatus!=='packed';
     if(exchangeView==='done') return x.status==='done';
     if(exchangeView==='onsite') return x.status==='booked'||x.status==='onsite';
     return true;
@@ -612,6 +627,7 @@ async function renderExchanges(view){
           </div>
           ${x.partnerWechat?`<div class="onsite-meta">微信：${escapeHtml(x.partnerWechat)}</div>`:''}
           ${x.time?`<div class="onsite-meta">🕒 ${escapeHtml(x.time)}</div>`:''}
+          ${x.packingStatus!=='packed'?`<div class="packing-warning">⚠ 未打包 · 出发前记得处理</div>`:''}
           ${x.note?`<div class="onsite-note">备注：${escapeHtml(x.note)}</div>`:''}
           <div class="exchange-visual">
             <div class="exchange-box"><strong>我给</strong>${give||'-'}</div>
@@ -624,20 +640,43 @@ async function renderExchanges(view){
     }else{
       rows.forEach(x=>{
         const ev=events.find(e=>e.id===x.eventId);
-        list.append(el(`<div class="item clickable" data-edit-exchange="${x.id}">
-          <div class="thumb">${x.receiveItems?.[0]?.images?.[0]?`<img src="${x.receiveItems[0].images[0]}">`:'互换'}</div>
-          <div class="item-main">
-            <div class="item-title">${escapeHtml(x.partnerName||'未命名')}</div>
-            <div class="sub">${escapeHtml(ev?.name||'未绑定场次')} · ${escapeHtml(x.place||'未填地点')}</div>
-            <div class="sub">${(x.receiveItems||[]).map(r=>escapeHtml(r.name)).join('、')||'未填写对方物料'}</div>
+        const isPending=x.status==='booked'||x.status==='onsite';
+        const packed=x.packingStatus==='packed';
+        const give=(x.give||[]).map(g=>`${escapeHtml(materialChoiceLabel(materials.find(m=>m.id===g.materialId),g.subItemId))} ×${g.qty}`).join('、');
+        const recv=(x.receiveItems||[]).map(r=>`${escapeHtml(r.name||'对方物料')} ×${r.qty}`).join('、');
+        list.append(el(`<div class="exchange-list-card clickable" data-edit-exchange="${x.id}">
+          <div class="exchange-list-head">
+            <div>
+              <div class="item-title">${escapeHtml(x.partnerName||'未命名')}</div>
+              <div class="sub">${escapeHtml(ev?.name||'未绑定场次')}</div>
+            </div>
+            <div class="location-pill">${escapeHtml(x.place||'未填地点')}</div>
           </div>
-          <div class="badge">${statusLabel(x.status)}</div>
+          <div class="exchange-tags">
+            <span class="exchange-status-chip">${statusLabel(x.status)}</span>
+            ${isPending?`<span class="packing-chip ${packed?'packed':'unpacked'}">${packed?'✓ 已打包':'📦 未打包'}</span>`:''}
+          </div>
+          <div class="exchange-mini-grid">
+            <div><strong>我给</strong><span>${give||'-'}</span></div>
+            <div><strong>她给</strong><span>${recv||'-'}</span></div>
+          </div>
+          ${x.note?`<div class="exchange-list-note">备注：${escapeHtml(x.note)}</div>`:''}
+          ${isPending?`<button type="button" class="packing-toggle ${packed?'secondary-packed':''}" data-toggle-packing="${x.id}">${packed?'↩ 改为未打包':'📦 标记已打包'}</button>`:''}
         </div>`));
       });
     }
+    list.querySelectorAll('[data-toggle-packing]').forEach(b=>b.addEventListener('click',async(e)=>{
+      e.stopPropagation();
+      const x=all.find(i=>i.id===b.dataset.togglePacking);
+      if(!x)return;
+      x.packingStatus=x.packingStatus==='packed'?'unpacked':'packed';
+      x.packedAt=x.packingStatus==='packed'?new Date().toISOString():null;
+      await put('exchanges',x);
+      render();
+    }));
     list.querySelectorAll('[data-complete]').forEach(b=>b.addEventListener('click',async(e)=>{
       e.stopPropagation();
-      const x=all.find(i=>i.id===b.dataset.complete); x.status='done'; x.completedAt=new Date().toISOString(); await put('exchanges',x); render();
+      const x=all.find(i=>i.id===b.dataset.complete); x.status='done'; x.completedAt=new Date().toISOString(); x.packingStatus='packed'; x.packedAt=x.packedAt||new Date().toISOString(); await put('exchanges',x); render();
     }));
   }
   document.querySelectorAll('[data-view]').forEach(b=>{
@@ -719,6 +758,7 @@ document.addEventListener('click',e=>{
   if(shortcut){
     if(shortcut==='materials'){route='materials';render();return;}
     if(shortcut==='pending'){route='exchanges';exchangeView='pending';exchangeEventFilter=homeEventId||'all';render();return;}
+    if(shortcut==='unpacked'){route='exchanges';exchangeView='unpacked';exchangeEventFilter=homeEventId||'all';render();return;}
     if(shortcut==='squats'){route='squats';squatFilter='want';squatEventFilter=homeEventId||'all';render();return;}
     if(shortcut==='events'){
       const target=document.querySelector('#home-events-list');
@@ -916,7 +956,11 @@ async function openModal(action,id=null){
       <div class="field"><label>对方给我数量</label><input class="input" name="receiveQty" type="number" min="1" value="${receive.qty||1}"></div>
       <div class="row"><div class="field"><label>交换地点</label><input class="input" name="place" value="${escapeHtml(current?.place||'')}" placeholder="例如：F6场内"></div><div class="field"><label>时间</label><input class="input" name="time" type="time" value="${current?.time||''}"></div></div>
       <div class="field"><label>现场备注</label><textarea name="note">${escapeHtml(current?.note||'')}</textarea></div>
-      <div class="field"><label>状态</label><select name="status">
+      <div class="field"><label>打包状态</label><select name="packingStatus">
+        <option value="unpacked" ${(current?.packingStatus||((current?.status==='done')?'packed':'unpacked'))==='unpacked'?'selected':''}>未打包</option>
+        <option value="packed" ${(current?.packingStatus||((current?.status==='done')?'packed':'unpacked'))==='packed'?'selected':''}>已打包</option>
+      </select></div>
+      <div class="field"><label>交换状态</label><select name="status">
         ${[['booked','已约定'],['onsite','待交换'],['done','已完成'],['cancelled','已取消']].map(([v,l])=>`<option value="${v}" ${(current?.status||'onsite')===v?'selected':''}>${l}</option>`).join('')}
       </select></div>
       ${current?'<button type="button" class="danger" id="delete-exchange">删除互换</button>':''}`;
@@ -971,7 +1015,11 @@ async function openModal(action,id=null){
         .map(g=>({materialId:g.materialId,subItemId:g.subItemId||null,qty:Math.max(1,Number(g.qty||1))}));
       obj.receiveItems=[{name:f.get('receiveName'),images:newImgs.length?newImgs:oldImgs,qty:Number(f.get('receiveQty')||1)}];
       obj.place=f.get('place');obj.time=f.get('time');obj.note=f.get('note');obj.status=f.get('status');
+      const nextPacking=f.get('packingStatus')||'unpacked';
+      if(obj.packingStatus!==nextPacking)obj.packedAt=nextPacking==='packed'?new Date().toISOString():null;
+      obj.packingStatus=nextPacking;
       if(obj.status==='done'&&!obj.completedAt)obj.completedAt=new Date().toISOString();
+      if(obj.status==='done'&&obj.packingStatus!=='packed'){obj.packingStatus='packed';obj.packedAt=obj.packedAt||new Date().toISOString();}
       if(obj.status!=='done')obj.completedAt=null;
       await put('exchanges',obj);
     };
@@ -1058,8 +1106,8 @@ window.addEventListener('keydown',e=>{
 (async()=>{
   if('caches' in window){
     const keys=await caches.keys();
-    await Promise.all(keys.filter(k=>k!=='xingyu-v2-5-0').map(k=>caches.delete(k)));
+    await Promise.all(keys.filter(k=>k!=='xingyu-v2-6-0').map(k=>caches.delete(k)));
   }
   db=await openDB();await render();
-  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.5.0').catch(()=>{});
+  if('serviceWorker' in navigator)navigator.serviceWorker.register('./sw.js?v=2.6.0').catch(()=>{});
 })();

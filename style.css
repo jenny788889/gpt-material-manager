@@ -341,3 +341,85 @@ dialog,
 .tabbar button.active{
   font-weight:800;
 }
+
+/* V2.6.0：互换打包状态 */
+.metric-with-sub small{
+  display:block;
+  margin-top:3px;
+  font-size:11px;
+  font-weight:800;
+  color:#ff7a22;
+}
+.packing-home-card{
+  width:100%;
+  border:1px solid #ded9ff;
+  background:#fff;
+  border-radius:18px;
+  padding:14px 16px;
+  display:grid;
+  grid-template-columns:auto 1fr auto;
+  align-items:center;
+  gap:12px;
+  text-align:left;
+  color:inherit;
+}
+.packing-home-card.all-packed{border-color:#d9eee1;background:#fbfffc}
+.packing-home-icon{
+  width:42px;height:42px;border-radius:14px;
+  display:grid;place-items:center;
+  background:#fff3e8;font-size:21px;
+}
+.packing-home-card.all-packed .packing-home-icon{background:#eafbf2}
+.packing-home-main{min-width:0;display:flex;flex-direction:column;gap:4px}
+.packing-home-main strong{font-size:14px}
+.packing-home-main span{font-size:12px;color:var(--muted)}
+.packing-home-action{
+  padding:8px 10px;border-radius:10px;
+  background:var(--primary);color:white;
+  font-size:12px;font-weight:800;white-space:nowrap;
+}
+.packing-home-card.all-packed .packing-home-action{display:none}
+
+.exchange-list-card{
+  background:white;border:1px solid var(--border);border-radius:18px;
+  padding:15px;
+}
+.exchange-list-head{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.exchange-tags{display:flex;gap:7px;flex-wrap:wrap;margin:10px 0}
+.exchange-status-chip,.packing-chip{
+  display:inline-flex;align-items:center;min-height:24px;
+  padding:4px 9px;border-radius:999px;font-size:11px;font-weight:800;
+}
+.exchange-status-chip{background:#f0eeff;color:var(--primary)}
+.packing-chip.unpacked{background:#fff0e6;color:#e96d16}
+.packing-chip.packed{background:#eafbf2;color:#168a53}
+.exchange-mini-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:8px;
+}
+.exchange-mini-grid>div{
+  background:#fafafa;border-radius:13px;padding:10px 11px;min-width:0;
+}
+.exchange-mini-grid strong{
+  display:block;font-size:11px;color:#4b5563;margin-bottom:4px;
+}
+.exchange-mini-grid span{font-size:13px;line-height:1.45}
+.exchange-list-note{
+  margin-top:9px;padding:8px 10px;border-radius:10px;
+  background:#fafafa;color:#5b6473;font-size:12px;
+}
+.packing-toggle{
+  width:100%;margin-top:10px;min-height:42px;border:0;border-radius:12px;
+  background:var(--primary);color:white;font-size:14px;font-weight:800;
+}
+.packing-toggle.secondary-packed{
+  background:#f4f5f7;color:#596273;
+}
+.packing-warning{
+  margin-top:8px;padding:8px 10px;border-radius:10px;
+  background:#fff0e6;color:#d95f0b;font-size:12px;font-weight:800;
+}
+@media (max-width:420px){
+  .packing-home-card{grid-template-columns:auto 1fr;padding:13px}
+  .packing-home-action{grid-column:1 / -1;text-align:center}
+  .exchange-mini-grid{grid-template-columns:1fr}
+}
